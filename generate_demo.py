@@ -34,6 +34,12 @@ HOUR_WEIGHTS = [
 # где данных мало.
 PROJECT_SIZE = {"alpha": 900, "beta": 600, "gamma": 120, "delta": 8}
 
+# Последний день демо-периода. Дата фиксированная, а не «вчера»: так
+# analytics.py и demo_analysis.ipynb показывают одни и те же цифры при
+# любом запуске. По умолчанию период — сентябрь 2026 целиком, и
+# заложенный сбой (15–17 число) приходится на будни.
+END_DAY = date(2026, 9, 30)
+
 TOPICS = ["Статус заказа", "Доставка", "Возврат", "Оплата",
           "Режим работы", "Жалоба", "Другое"]
 
@@ -120,14 +126,13 @@ def make_hourly(project: str, days: list, rng) -> pd.DataFrame:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Демонстрационные выгрузки")
     ap.add_argument("--days", type=int, default=30, help="сколько дней")
-    ap.add_argument("--seed", type=int, default=42, help="одинаковые числа при запуске в один и тот же день")
+    ap.add_argument("--seed", type=int, default=42, help="одинаковые числа при каждом запуске")
     args = ap.parse_args()
 
     rng = np.random.default_rng(args.seed)
     random.seed(args.seed)
 
-    end = date.today() - timedelta(days=1)
-    days = [end - timedelta(days=i) for i in reversed(range(args.days))]
+    days = [END_DAY - timedelta(days=i) for i in reversed(range(args.days))]
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Период: {days[0]:%d.%m.%Y} — {days[-1]:%d.%m.%Y}\n")
