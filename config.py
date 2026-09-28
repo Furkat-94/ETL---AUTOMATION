@@ -18,15 +18,19 @@ load_dotenv(ROOT / ".env")
 # завязанные на SQLite (см. README, «Готовность к переезду»):
 #   postgresql+psycopg2://user:pass@host:5432/callcenter
 #   mssql+pyodbc://user:pass@host/callcenter?driver=ODBC+Driver+17
-DB_URL = os.getenv("DB_URL", f"sqlite:///{ROOT / 'callcenter.db'}")
+# «or», а не значение по умолчанию в getenv: в .env.example строка
+# DB_URL= пустая, и пустая строка тоже должна значить «не задано».
+DB_URL = os.getenv("DB_URL") or f"sqlite:///{ROOT / 'callcenter.db'}"
 
 # --- источник данных ---
 SOURCE_URL = os.getenv("SOURCE_URL", "")
 SOURCE_USER = os.getenv("SOURCE_USER", "")
 SOURCE_PASSWORD = os.getenv("SOURCE_PASSWORD", "")
 
-# Папка с выгрузками: <проект>_calls_month.xlsx и <проект>_hourly.xlsx
-DATA_DIR = ROOT / "data"
+# Папка с выгрузками: <проект>_calls_month.xlsx и <проект>_hourly.xlsx.
+# Своя, а не общая data/: там лежат выгрузки etl/ (alpha_crm.xlsx и
+# другие), и загрузчик принял бы их за файлы своих проектов.
+DATA_DIR = ROOT / "data" / "sql"
 
 # Проекты, по которым идёт учёт.
 PROJECTS = ["alpha", "beta", "gamma", "delta"]
