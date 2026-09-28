@@ -53,6 +53,11 @@ load_dotenv(ROOT / ".env")
 DEMO = os.getenv("DEMO") == "1"
 DEMO_DIR = DATA_DIR / "demo_output"
 
+# Последний день демо-выгрузок. Одна дата на всё: по ней
+# generate_etl_demo.py строит файлы, а sheets_analytics.ipynb в
+# демо-режиме считает её «сегодняшним» днём.
+DEMO_DAY = date(2026, 8, 17)
+
 
 def env(name: str, default: str = "") -> str:
     """Настройка из .env. В коде таких значений нет — только имена."""
