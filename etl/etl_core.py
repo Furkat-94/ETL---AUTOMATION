@@ -12,7 +12,8 @@ etl_core.py — общий модуль для ETL-пайплайнов конт
   - подключение к Google Sheets,
   - поиск/создание листа по дате,
   - сериализация значений в JSON-совместимые типы,
-  - форматирование листа через Sheets API.
+  - форматирование листа через Sheets API,
+  - демо-режим: Excel-книга вместо таблицы Google (DEMO=1 в .env).
 
 Специфика каждого проекта живёт в своём ноутбуке.
 """
@@ -26,8 +27,10 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import gspread
 import numpy as np
+import openpyxl
 import pandas as pd
 from dotenv import load_dotenv
+from openpyxl.utils import range_boundaries
 
 # ==========================================================================
 # ПУТИ И НАСТРОЙКИ ОКРУЖЕНИЯ
@@ -45,10 +48,21 @@ CREDENTIALS = str(ROOT / "credentials.json")
 # ID таблиц, адрес CRM и логины живут в .env (образец — .env.example).
 load_dotenv(ROOT / ".env")
 
+# DEMO=1 в .env — писать в Excel-файлы вместо Google Sheets и не ходить
+# в CRM. Как это устроено — раздел «ДЕМО-РЕЖИМ» в конце файла.
+DEMO = os.getenv("DEMO") == "1"
+DEMO_DIR = DATA_DIR / "demo_output"
+
 
 def env(name: str, default: str = "") -> str:
     """Настройка из .env. В коде таких значений нет — только имена."""
-    return os.getenv(name, default)
+    value = os.getenv(name, default)
+    # В демо-режиме таблиц Google нет, и ID им не нужен. Пустой ID
+    # заменяется именем Excel-файла, куда пойдёт запись:
+    # MONITORING_SHEET_ID -> data/demo_output/monitoring.xlsx
+    if DEMO and not value and name.endswith("_SHEET_ID"):
+        return name[:-len("_SHEET_ID")].lower()
+    return value
 
 
 # ==========================================================================
@@ -699,6 +713,18 @@ class SheetsLoader:
         иначе августовские данные молча ушли бы в июльскую таблицу.
         Вместо этого показывает список доступных таблиц.
         """
+        if DEMO:
+            # Вместо таблицы Google — Excel-книга с тем же названием
+            # в data/demo_output. Ключ Google в демо не нужен.
+            if title and not isinstance(title, str):
+                title = list(title)[0]
+            name = title or self.spreadsheet_id
+            if not name:
+                raise ValueError("Не задан ни spreadsheet_id, ни title")
+            self.sh = DemoBook(name)
+            log.info("Демо-режим: вместо Google Sheets — %s", self.sh.path)
+            return self
+
         if not self.credentials_path.exists():
             raise FileNotFoundError(f"credentials.json не найден: {self.credentials_path}")
 
@@ -1025,6 +1051,10 @@ class SheetsLoader:
                        записаны, и терять их из-за косметики не стоит.
         """
         if not requests:
+            return
+        if DEMO:
+            log.info("Демо-режим: оформление в Excel не переносится "
+                     "(правил: %d)", len(requests))
             return
         try:
             self.sh.batch_update({"requests": requests})
@@ -1435,3 +1465,183 @@ def preview(df: pd.DataFrame, title: str) -> None:
         _d(df)
     except ImportError:
         print(df.to_string())
+
+
+# ==========================================================================
+# ДЕМО-РЕЖИМ
+# ==========================================================================
+#
+# DEMO=1 в .env — таблицы Google подменяются Excel-книгами в
+# data/demo_output. Так ноутбуки запускаются без доступа к Google,
+# на демо-выгрузках из generate_etl_demo.py.
+#
+# Как устроено. SheetsLoader и ноутбуки работают с таблицей через
+# небольшой набор методов gspread: worksheets(), add_worksheet(),
+# values_batch_get() и ещё несколько. DemoBook и DemoSheet повторяют
+# ровно эти методы, только поверх файла Excel. Поэтому код ноутбуков
+# в демо-режиме тот же: connect() открывает книгу вместо таблицы,
+# дальше всё идёт как обычно.
+#
+# Чего в демо нет:
+#   - оформления: заливки, рамки, объединения — это запросы Sheets API,
+#     в Excel они пропускаются;
+#   - вычисления формул: книгу пишет openpyxl, а он формулы не считает.
+#     Поэтому формула сохраняется ТЕКСТОМ — видно, что ушло бы в Google, —
+#     и при чтении обратно приходит текстом, а не числом.
+
+
+class DemoSheet:
+    """Лист демо-книги: те методы листа gspread, что вызывает код."""
+
+    def __init__(self, book: "DemoBook", xl_sheet):
+        self.book = book
+        self.xl = xl_sheet            # лист openpyxl
+        # Номер листа нужен запросам оформления: в демо они не
+        # выполняются, но собираются так же, как для Google
+        self._properties = {"sheetId": book.xl.worksheets.index(xl_sheet)}
+
+    @property
+    def title(self) -> str:
+        return self.xl.title
+
+    def get(self, rng: str) -> List[List[str]]:
+        return self.book.read(self.xl, rng)
+
+    def batch_update(self, data: List[Dict[str, Any]],
+                     value_input_option: str = "") -> None:
+        for item in data:
+            self.book.put(self.xl, item["range"], item["values"])
+        self.book.save()
+
+    def batch_clear(self, ranges: List[str]) -> None:
+        for rng in ranges:
+            self.book.clear(self.xl, rng)
+        self.book.save()
+
+    def clear(self) -> None:
+        self.xl.delete_rows(1, self.xl.max_row)
+        self.book.save()
+
+    def format(self, *args, **kwargs) -> None:
+        """Числовой формат ячейки — оформление, в демо пропускается."""
+
+
+class DemoBook:
+    """Excel-книга в data/demo_output вместо таблицы Google."""
+
+    def __init__(self, title: str):
+        self.title = title
+        self.path = DEMO_DIR / f"{title}.xlsx"
+        if self.path.exists():
+            self.xl = openpyxl.load_workbook(self.path)
+        else:
+            # Новая таблица Google создаётся с одним пустым листом —
+            # здесь так же. Файл появится при первой записи.
+            self.xl = openpyxl.Workbook()
+            self.xl.active.title = "Лист1"
+
+    def save(self) -> None:
+        DEMO_DIR.mkdir(parents=True, exist_ok=True)
+        self.xl.save(self.path)
+
+    # --- листы ---
+
+    def worksheets(self) -> List[DemoSheet]:
+        return [DemoSheet(self, s) for s in self.xl.worksheets]
+
+    def worksheet(self, name: str) -> DemoSheet:
+        if name not in self.xl.sheetnames:
+            raise gspread.exceptions.WorksheetNotFound(name)
+        return DemoSheet(self, self.xl[name])
+
+    def add_worksheet(self, title: str, rows: int = 0,
+                      cols: int = 0) -> DemoSheet:
+        sheet = DemoSheet(self, self.xl.create_sheet(title))
+        self.save()
+        return sheet
+
+    def del_worksheet(self, sheet: DemoSheet) -> None:
+        self.xl.remove(sheet.xl)
+        self.save()
+
+    # --- значения ---
+
+    def _locate(self, full_range: str) -> tuple:
+        """«'Итог'!C5» -> (лист openpyxl, «C5»)."""
+        name, rng = full_range.rsplit("!", 1)
+        name = name.strip("'").replace("''", "'")
+        if name not in self.xl.sheetnames:
+            # Google на такой диапазон тоже отвечает ошибкой
+            raise ValueError(f"Демо-режим: в книге {self.path.name} "
+                             f"нет листа «{name}»")
+        return self.xl[name], rng
+
+    def values_batch_get(self, ranges: List[str]) -> Dict[str, Any]:
+        found = [self.read(*self._locate(r)) for r in ranges]
+        return {"valueRanges": [{"values": v} for v in found]}
+
+    def values_batch_update(self, body: Dict[str, Any]) -> None:
+        for item in body["data"]:
+            sheet, rng = self._locate(item["range"])
+            self.put(sheet, rng, item["values"])
+        self.save()
+
+    def batch_update(self, body: Dict[str, Any]) -> None:
+        """Запросы Sheets API — оформление и порядок вкладок. Пропускаем."""
+
+    def fetch_sheet_metadata(self) -> Dict[str, Any]:
+        """Описание листов: reset_sheet_format ищет в нём правила оформления."""
+        return {"sheets": [{"properties": {"sheetId": i}}
+                           for i in range(len(self.xl.worksheets))]}
+
+    # --- ячейки ---
+
+    @staticmethod
+    def put(sheet, rng: str, values: List[List[Any]]) -> None:
+        """Пишет блок значений, начиная с левой верхней ячейки диапазона."""
+        col0, row0 = range_boundaries(rng)[:2]
+        for i, row in enumerate(values):
+            for j, v in enumerate(row):
+                cell = sheet.cell(row=row0 + i, column=col0 + j)
+                cell.value = None if v == "" else v
+                # Формулу Google храним текстом: посчитать её openpyxl
+                # не может, а записанная формулой она испортит файл —
+                # CEILING с одним аргументом и СУММЕСЛИ Excel не знает
+                if isinstance(v, str) and v.startswith("="):
+                    cell.data_type = "s"
+
+    @staticmethod
+    def _bounds(sheet, rng: str) -> tuple:
+        """
+        Границы диапазона, обрезанные по заполненной части листа.
+
+        openpyxl заводит ячейку на каждое обращение, и чтение A1:GZ1
+        без обрезки раздуло бы файл пустыми ячейками.
+        """
+        c1, r1, c2, r2 = range_boundaries(rng)
+        return c1, r1, min(c2, sheet.max_column), min(r2, sheet.max_row)
+
+    def read(self, sheet, rng: str) -> List[List[str]]:
+        """
+        Значения диапазона так, как их отдаёт Sheets API: строками,
+        без пустых ячеек в конце строки и без пустых строк в конце.
+        """
+        c1, r1, c2, r2 = self._bounds(sheet, rng)
+        rows = []
+        for r in range(r1, r2 + 1):
+            row = []
+            for c in range(c1, c2 + 1):
+                v = sheet.cell(row=r, column=c).value
+                row.append("" if v is None else str(v))
+            while row and row[-1] == "":
+                row.pop()
+            rows.append(row)
+        while rows and not rows[-1]:
+            rows.pop()
+        return rows
+
+    def clear(self, sheet, rng: str) -> None:
+        c1, r1, c2, r2 = self._bounds(sheet, rng)
+        for r in range(r1, r2 + 1):
+            for c in range(c1, c2 + 1):
+                sheet.cell(row=r, column=c).value = None

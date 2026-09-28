@@ -44,6 +44,10 @@ load_dotenv(ROOT / ".env")
 IP = os.getenv("CRM_HOST", "crm.local")
 BASE = f"http://{IP}/crm"
 
+# DEMO=1 в .env — в CRM не ходить: демо-выгрузки кладёт в data/
+# скрипт generate_etl_demo.py
+DEMO = os.getenv("DEMO") == "1"
+
 # Куда класть файлы — туда, где их ищут ноутбуки.
 OUT_DIR = ROOT / "data"
 
@@ -315,6 +319,11 @@ def download(session: requests.Session, report_id: str, name: str) -> Path:
 
 
 def main() -> None:
+    if DEMO:
+        print("Демо-режим: в CRM не хожу. Демо-выгрузки кладёт в data/ "
+              "скрипт generate_etl_demo.py.")
+        return
+
     default_end = END_DATE or (date.today() - timedelta(days=1))
 
     if ASK:

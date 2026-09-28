@@ -52,7 +52,7 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-from etl_core import SheetsLoader, DATA_DIR, CREDENTIALS, env
+from etl_core import SheetsLoader, DATA_DIR, CREDENTIALS, env, DEMO
 
 # ============================ НАСТРОЙКИ ============================
 
@@ -692,6 +692,13 @@ def ask_write() -> bool:
 
 
 def main() -> None:
+    # Все числа берутся живыми запросами к CRM, а в демо-режиме в сеть
+    # не ходим — считать не из чего
+    if DEMO:
+        print("Демо-режим: KPI считаются запросами к CRM — в демо "
+              "скрипт не запускается.")
+        return
+
     yesterday = date.today() - timedelta(days=1)
     d_from = DATE_FROM or yesterday
     d_to = DATE_TO or yesterday
