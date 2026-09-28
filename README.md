@@ -147,6 +147,11 @@ python analytics.py          # найдёт аномалии и худшие ч�
 по часам, доля пропущенных, аномальные дни, операторы. Выводы под
 графиками не вписаны руками, их печатает код по данным в базе.
 
+**Тесты.** `pytest` из корня проверяет правила, на которых держатся
+отчёты: округление минут (и правило Alpha «до 5 секунд — 0 минут»),
+тарифную сетку KPI, разбор чисел «1 036» из АТС и выбор буферного
+дня — в etl/ и в SQL-части.
+
 ### Инженерные решения
 
 #### Буферный день
@@ -307,6 +312,7 @@ analytics.py         аномальные дни и худшие часы
 schema.sql views.sql таблицы и витрины
 queries.sql          разборы оконных функций
 demo_analysis.ipynb  графики на демо-данных SQL-части
+tests/test_rules.py  тесты правил (pytest)
 etl/
   etl_core.py        общий модуль: пути, .env, чтение
                      Excel, даты, Google Sheets, сверки,
@@ -489,6 +495,11 @@ hourly load, share of missed calls, anomalous days, operators. The
 conclusions under the charts are not typed by hand — the code prints
 them from the data in the database.
 
+**Tests.** `pytest` from the root checks the rules the reports rely
+on: minute rounding (including Alpha's "up to 5 seconds is 0
+minutes"), the KPI rate table, parsing "1 036" numbers from the PBX,
+and picking the buffer day — in etl/ and in the SQL part.
+
 ### Engineering decisions
 
 #### Buffer day
@@ -659,6 +670,7 @@ analytics.py         anomalous days and worst hours
 schema.sql views.sql tables and views
 queries.sql          window function walkthroughs
 demo_analysis.ipynb  charts on the SQL part demo data
+tests/test_rules.py  tests of the rules (pytest)
 etl/
   etl_core.py        shared module: paths, .env, Excel
                      reading, dates, Google Sheets,
