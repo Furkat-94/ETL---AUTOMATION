@@ -143,6 +143,10 @@ python load_daily.py         # загрузит их в базу
 python analytics.py          # найдёт аномалии и худшие часы
 ```
 
+Графики на тех же данных — `demo_analysis.ipynb` в корне: нагрузка
+по часам, доля пропущенных, аномальные дни, операторы. Выводы под
+графиками не вписаны руками, их печатает код по данным в базе.
+
 ### Инженерные решения
 
 #### Буферный день
@@ -302,6 +306,7 @@ load_daily.py        загрузка в базу
 analytics.py         аномальные дни и худшие часы
 schema.sql views.sql таблицы и витрины
 queries.sql          разборы оконных функций
+demo_analysis.ipynb  графики на демо-данных SQL-части
 etl/
   etl_core.py        общий модуль: пути, .env, чтение
                      Excel, даты, Google Sheets, сверки,
@@ -479,6 +484,11 @@ python load_daily.py         # load them into the database
 python analytics.py          # anomalies and worst hours
 ```
 
+Charts on the same data are in `demo_analysis.ipynb` at the root:
+hourly load, share of missed calls, anomalous days, operators. The
+conclusions under the charts are not typed by hand — the code prints
+them from the data in the database.
+
 ### Engineering decisions
 
 #### Buffer day
@@ -648,6 +658,7 @@ load_daily.py        loading into the database
 analytics.py         anomalous days and worst hours
 schema.sql views.sql tables and views
 queries.sql          window function walkthroughs
+demo_analysis.ipynb  charts on the SQL part demo data
 etl/
   etl_core.py        shared module: paths, .env, Excel
                      reading, dates, Google Sheets,
